@@ -38,10 +38,9 @@ the version here matches the `VERSION` define in `picocalc-shapes.c`.
 ## [V0.1] - 2026-09-12
 
 ### Removed
-- The speech-synthesis demo (`picocalc_speech.c/.h` and the V/H/J/K/S keys)
-  — split off into the new PicoCalc-Speech project.
+- The speech-synthesis demo (`picocalc_speech.c/.h` and the V/H/J/K/S keys),
+  split off into its own program.
 - The sound-effects demo and the underlying audio engine
   (`picocalc_sound_effects.c/.h`, `picocalc_audio.c/.h`, the E/G/W/Z/X keys,
-  and `pcaudio_init()`) — moved to PicoCalc-Speech, which is now the only
-  place this engine is exercised. This project no longer produces any
-  sound.
+  and `pcaudio_init()`), moved out along with the speech demo. This
+  project no longer produces any sound.
