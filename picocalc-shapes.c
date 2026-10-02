@@ -122,6 +122,7 @@
  *               colour back around the rainbow (moves its arrow left)
  *      F5     - rotate the selected shape 5 degrees clockwise
  *      F4     - rotate the selected shape 5 degrees counter-clockwise
+ *      ESC or Q - leave for the PicoCalc UF2 Loader menu
  *      ~ (SHIFT + backtick) - reboot into BOOTSEL (USB drive) mode
  */
 
@@ -130,6 +131,9 @@
 
 #include "pico/stdlib.h"
 #include "pico/bootrom.h"   /* reset_usb_boot() - BOOTSEL reboot ('~') */
+#include "hardware/watchdog.h" /* watchdog_hw, watchdog_reboot() - exit to the UF2 Loader */
+
+#include "loader_const.h"   /* the UF2 Loader hand-off values           */
 
 #include "lcd.h"            /* WIDTH, HEIGHT, RGB(), lcd_*, GLYPH_HEIGHT,
                              * ROWS, MAX_ROW                            */
@@ -751,6 +755,26 @@ static void draw_scene(const int *size, int selected, const int *angle,
     show_status(selected, size[selected], angle[selected]);
 }
 
+/* Leaves the program for the PicoCalc UF2 Loader's menu: shows a short
+ * message, asks the loader for its menu (see LOADER_COMMAND_MAGIC in
+ * loader_const.h) and reboots with the watchdog. If the program was flashed
+ * straight to the chip with no loader, nothing reads the request and it
+ * simply restarts. The Windows / Linux build uses a stand-in watchdog that
+ * closes the program.                                                     */
+static void exit_to_loader(void)
+{
+    put_row(STATUS_ROW, "BACK TO THE LOADER...", COL_TEXT);
+    sleep_ms(LOADER_EXIT_MSG_MS);
+
+    watchdog_hw->scratch[LOADER_SCRATCH_MODE] = LOADER_BOOT_MODE_SD;
+    watchdog_hw->scratch[LOADER_SCRATCH_ARGUMENT] = 0;
+    watchdog_hw->scratch[LOADER_SCRATCH_MAGIC] = LOADER_COMMAND_MAGIC;
+    watchdog_reboot(0, 0, LOADER_REBOOT_DELAY_MS);
+
+    for (;;)
+        tight_loop_contents();      /* the reboot comes in a few milliseconds */
+}
+
 int main(void)
 {
     stdio_init_all();
@@ -789,6 +813,9 @@ int main(void)
             while (1)
                 tight_loop_contents();
         }
+
+        if (code == KEY_ESC || code == 'q' || code == 'Q')
+            exit_to_loader();                   /* back to the UF2 Loader */
 
         if (code == KEY_F1) {                     /* toggle shape / colour mode */
             colour_mode = !colour_mode;
