@@ -106,9 +106,8 @@
  *  Built on the drivers from "picocalc-text-starter" by Blair Leduc
  *  (drivers/lcd.c, drivers/southbridge.c): lcd_init(), lcd_solid_rectangle(),
  *  lcd_putstr() for drawing and sb_init() / sb_read_keyboard() for raw
- *  keyboard-FIFO polling, the same pattern picocalc-music-maker uses.  We
- *  do NOT call picocalc_init(), which would start a background poll
- *  draining the same FIFO.
+ *  keyboard-FIFO polling.  We do NOT call picocalc_init(), which would start
+ *  a background poll draining the same FIFO.
  *
  *  Controls:
  *      UP     - grow the selected shape (2px per side, 4px per dimension)
