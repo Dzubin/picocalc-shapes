@@ -22,16 +22,37 @@ RP2040.
 
 | Key           | Action                                                          |
 |---------------|-----------------------------------------------------------------|
-| LEFT / RIGHT  | select the previous / next shape (a blue box marks the selection); in colour mode, step the selected shape's colour around the rainbow |
-| UP / DOWN     | grow / shrink the selected shape (stops at 1x1 pixel)           |
-| F1            | toggle between shape-select mode and colour-select mode         |
+| LEFT / RIGHT  | select the previous / next shape (a white box marks the selection); in colour mode, step the selected shape's colour around the rainbow |
+| + / -         | grow / shrink the selected shape (stops at 1x1 pixel)           |
+| UP / DOWN     | move through the shapes and pickers: from a top-row shape DOWN goes to the shape below, then to the hue strips, the saturation bar and the value bar; UP goes back |
+| F1            | step through shape-select, colour-select (plain rainbow), colour-select (improved rainbow), then back to shape-select |
+| F2            | toggle saturation mode: LEFT / RIGHT change the selected shape's saturation, 0 to 100 percent in steps of 2 |
+| F3            | toggle value (brightness) mode: LEFT / RIGHT change the selected shape's value, 0 to 100 percent in steps of 2 |
+| ?             | show the help screen, which also appears when the program starts; any key continues |
 | F4 / F5       | rotate the selected shape 5 degrees counter-clockwise / clockwise |
 | ESC or Q      | leave for the PicoCalc UF2 Loader menu                          |
 | ~ (SHIFT + `) | reboot into BOOTSEL (USB drive) mode                            |
 
-In colour mode a small arrow above the rainbow strip points at the exact
-stripe the selected shape is drawn in. The status line under the strip shows
+There are two rainbow strips, stacked above the status line. The top one is
+the plain hue wheel. The lower one is an improved wheel: each colour channel's
+linear ramp is passed through sqrt(v * (510 - v)), so the colours between the
+primaries (yellow, cyan, magenta and the blends around them) are not dimmer
+than the primaries. Both strips use the same hue for the same column. In the
+first colour mode a small arrow above the top strip points at the exact stripe
+the selected shape is drawn in; in the second colour mode an arrow below the
+lower strip does the same. A shape keeps the wheel it was last coloured from. The status line under the strip shows
 the selected shape's name, size and rotation.
+The pickers are stacked: the two hue strips on top, then the saturation bar,
+then the value bar, with the colour line under them. The saturation bar runs
+from white (no saturation) at the left end to the full colour at the selected
+shape's hue at the right end; press F2 to select it. The value (brightness)
+bar runs from black at the left end to the full colour at the right end; press
+F3 to select it. Arrows mark the selected shape's hue, saturation and value at
+all times, and the picker being edited is outlined in white, as the selected
+shape is. Each shape keeps its own saturation and value, and each bar shows
+the colours the shape can have with the other setting held. The colour line
+shows the selected shape's colour as its RGB565 fields in hex: R and B from 00
+to 1F, G from 00 to 3F.
 
 Leaving asks the loader for its menu through the watchdog scratch registers
 (constants in `loader_const.h`); if the program was flashed straight to the
@@ -42,6 +63,7 @@ chip with no loader installed it simply restarts, and on a PC it closes.
 - `picocalc-shapes.c` - the whole program. The header comment block at the top
   is the design reference (drawing primitives, rotation, selection and colour
   modes, screen layout).
+- `shapes_const.h` - every constant and data table (colours, sizes, screen layout, keys, sine table, shape names).
 - `loader_const.h` - the values used to hand control back to the UF2 Loader.
 - `CMakeLists.txt`, `pico_sdk_import.cmake` - firmware build config.
 - `desktop/` - Desktop (SDL2) build for Windows and Linux: its own
@@ -95,10 +117,24 @@ Output: `shapes-Linux` and `libSDL2-2.0.so.0` in the top-level folder.
 [`picocalc-text-starter`](https://github.com/BlairLeduc/picocalc-text-starter)
 by **Blair Leduc** (LCD, audio and south-bridge keyboard drivers) is vendored
 in `picocalc-text-starter-main/` and used under its own license (see the
-`LICENSE` file in that folder). One local change is made there, not in
-upstream: in `drivers/fat32.c`, `get_next_free_cluster()` now advances its
+`LICENSE` file in that folder). Two local changes are made there, not in
+upstream: in `drivers/lcd.c`, `lcd_putstr()` now cuts a string off at the right edge
+of the display instead of overrunning its one-row line buffer; and in `drivers/fat32.c`, `get_next_free_cluster()` now advances its
 search hint past the cluster it hands out, so a long sequential write to the
 SD card no longer re-scans every cluster already given out and looks hung.
+
+Two more small fixes were made in `picocalc-text-starter-main/drivers/` after that one.
+In `fat32.c`, `fat32_dir_read()` skips deleted entries before it looks at long-name
+parts and bounds-checks the long-name offset (a deleted long-name part used to be read
+as a live one and wrote 13 bytes at `filename + 468` of a 256-byte stack buffer), and
+`link_entry()` compares the 0xE5 deleted marker as an unsigned byte. In `sdcard.c`, the
+wait for a busy card is timed by the clock (0.5 s) and not by counting 10000 bytes,
+every command except CMD0 waits for the card first, and a write returns an error if the
+card is still busy after it (without that, a card that was still programming a block
+ignored the next command, and reads and writes failed on good sectors). Both were sent
+to the author as pull requests
+([#32](https://github.com/BlairLeduc/picocalc-text-starter/pull/32) and
+[#33](https://github.com/BlairLeduc/picocalc-text-starter/pull/33)).
 
 ## License
 

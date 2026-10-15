@@ -11,12 +11,12 @@
  *  `size[NUM_SHAPES]` entry - its bounding-box dimension (the rectangle's
  *  long side, the square's side, the triangle's base, the pentagon/star's
  *  circumscribed diameter, the circle's diameter) - all starting
- *  maximised at INIT_SIZE (== MAX_SIZE, 59).  UP/DOWN grow or
+ *  maximised at INIT_SIZE (== MAX_SIZE, 49).  + and - grow or
  *  shrink only the *selected* shape's size[], each press moving the (not
  *  displayed) bounding box that inscribes its pixels by 2 pixels in every
  *  direction (left, right, top and bottom) - stopping at the 1x1-pixel
- *  degenerate case on DOWN.  MIN_SIZE, MAX_SIZE and INIT_SIZE are all odd,
- *  and every UP/DOWN step is by 4 (even), so a size can never become even:
+ *  degenerate case on -.  MIN_SIZE, MAX_SIZE and INIT_SIZE are all odd,
+ *  and every + / - step is by 4 (even), so a size can never become even:
  *  with h = size/2 (integer division), an odd size spans exactly
  *  [cx-h, cx+h] about its centre, so one pixel sits dead-centre and a
  *  rotation about (cx,cy) doesn't drift; an even size spans one pixel
@@ -50,58 +50,67 @@
  *  by -/+ ROTATE_STEP (5) degrees, wrapped to 0..359.
  *
  *  One shape at a time is "selected" (index `selected`, SHAPE_THIN_RECT
- *  first) and gets a hollow blue box drawn BOX_PAD pixels outside its own
+ *  first) and gets a hollow white box drawn BOX_PAD pixels outside its own
  *  size x size box (draw_box_outline() - four thin fill() strips, since
  *  there's no unfilled-rectangle primitive either).  F4/F5 always rotate
  *  whichever shape is currently selected.  shape_center() is the one
  *  place each shape's (cx,cy) is defined, so draw_scene()'s drawing loop
  *  and the selection box always agree on where a shape is.
  *
- *  F1 toggles `colour_mode` between two meanings for LEFT/RIGHT (bool
- *  colour_mode in main()):
- *    - shape-select mode (the default): RIGHT/LEFT step `selected`
- *      forward/back through SHAPE_* / reading order, wrapping at both
- *      ends (circle -> thin rectangle going forward, and back).
- *    - colour-select mode: RIGHT/LEFT instead step the *selected* shape's
- *      own `hue[NUM_SHAPES]` entry +/- HUE_STEP (2) degrees, wrapped to
- *      0..359, and a small downward-pointing arrow (draw_colour_arrow())
- *      appears above the rainbow strip at that hue's column (the inverse
- *      of the strip's own col -> hue mapping, rounded to the nearest
- *      column - see draw_scene()), so the arrow always points straight
- *      down at the exact stripe of rainbow the shape is now coloured
- *      with.  Every shape keeps its own hue (DEFAULT_HUE, pure green, at
- *      boot), remembered the same way angle[] is.
+ *  `mode` (MODE_SHAPE, or one of the pickers below) decides what LEFT and
+ *  RIGHT do.  In shape-select mode they step `selected` forward/back
+ *  through SHAPE_* / reading order, wrapping at both ends (circle -> thin
+ *  rectangle going forward, and back).  In a picker mode they change the
+ *  selected shape's hue, saturation or value.  F1 steps shape -> hue (plain
+ *  strip) -> hue (improved strip) -> shape, F2 toggles saturation and F3
+ *  toggles value; UP and DOWN walk the same modes as one vertical chain
+ *  (see the Controls list).
+ *
+ *  The pickers are stacked above the RGB text row (COLOUR_ROW): hue on
+ *  top, then saturation, then value.  Hue is two RAINBOW_W x RAINBOW_H
+ *  strips flush against each other: the plain hue wheel on top and an
+ *  improved wheel below it (each linear channel ramp v is remapped to
+ *  sqrt(v * (510 - v)), so the colours between the primaries are not
+ *  dimmer than the primaries).  Both map a column to the same hue
+ *  (col * 360 / RAINBOW_W), so all RAINBOW_W columns sweep the full 360
+ *  degrees exactly once, whatever RAINBOW_W is.  LEFT/RIGHT in a hue mode
+ *  step the selected shape's hue[] entry by HUE_STEP (2) degrees, wrapped
+ *  to 0..359, and record which wheel the shape is coloured from
+ *  (wheel[NUM_SHAPES]).  The saturation bar runs from white at the left
+ *  end to the full colour at the right, and the value bar from black to
+ *  the full colour.  Each shape keeps its own hue, wheel, sat[] and val[]
+ *  (DEFAULT_HUE, pure green, at full saturation and value at boot), the
+ *  same way angle[] is remembered.  Small arrows (draw_colour_arrow() and
+ *  draw_bar_arrow()) always show the selected shape's hue, saturation and
+ *  value; a white outline (draw_bar_outline()) marks the picker being
+ *  edited.  The selected shape's RGB565 fields are shown in hex on the text
+ *  row under the value bar.
  *
  *  The status text row (STATUS_ROW, one row above MAX_ROW - the physical
  *  PicoCalc's screen/bezel makes the very bottom row hard to see, so it's
  *  reserved for a possible future debug line and nothing else uses it)
  *  shows the selected shape's name, size and rotation via put_row() /
  *  show_status() and the built-in 8x10 font, e.g.
- *  "SQUARE  SIZE: 59px  ROTATION: 35 DEG", updated on every
- *  UP / DOWN / LEFT / RIGHT / F4 / F5 press.
+ *  "SQUARE  SIZE: 49px  ROTATION: 35 DEG", updated on every
+ *  + / - / LEFT / RIGHT / F4 / F5 press.
  *
- *  Just above the status line sits a RAINBOW_W x RAINBOW_H (300x20)
- *  rainbow strip (draw_rainbow_strip()), each column's hue proportional
- *  to its position (col * 360 / RAINBOW_W), so all RAINBOW_W columns
- *  together sweep the full 360 degrees exactly once regardless of
- *  RAINBOW_W's value - it's not tied to HUE_STEP or any other fixed
- *  degrees-per-column.  It's built once into a static RAINBOW_W x
- *  RAINBOW_H pixel buffer and sent with a single lcd_blit(), not one
- *  fill() per column - see draw_rainbow_strip()'s own comment for why
- *  that used to be visibly slow.  The colour math is hue_to_rgb565(int
- *  hue_deg) - walks a pure
- *  hue (0..359 degrees, matching the ROTATION display's units) around the
- *  standard six-segment colour wheel and packs it straight into the
- *  RGB565 lcd_solid_rectangle() etc. already expect (via the driver's own
- *  RGB() macro) - the same function draw_shape() calls (through
- *  draw_scene()) to turn each shape's hue[] entry into the colour it's
- *  actually drawn in, so a shape's fill always matches the rainbow column
- *  its arrow points at.  rgb565_to_hue(uint16_t) is the inverse - unpack
- *  5/6/5 back to 8-bit-per-channel, then the standard max/min-channel HSV
- *  hue formula; nothing needs it yet (hue[] is stored directly, never
- *  reconstructed from a packed colour), so expect a harmless "defined but
- *  not used" -Wall warning on it alone.  Both are integer-only, like the
- *  rest of this file's math.
+ *  The strips are built once into static RAINBOW_W x RAINBOW_H buffers and
+ *  sent with a single lcd_blit() each, not one fill() per column (see
+ *  draw_rainbow_strip()'s own comment for why that used to be visibly
+ *  slow).  The saturation and value bars depend on the selected shape, so
+ *  draw_bar() rebuilds one only when the hue, wheel or the other setting
+ *  changed.  The colour math is hue_to_rgb565(): it walks a pure hue
+ *  (0..359 degrees, matching the ROTATION display's units) around the
+ *  standard six-segment colour wheel, applies the wheel, the saturation
+ *  (blend toward white) and the value (scale toward black), and packs the
+ *  result into the RGB565 that lcd_solid_rectangle() etc. expect (via the
+ *  driver's own RGB() macro).  draw_shape() gets its colour from the same
+ *  function (through draw_scene()), so a shape's fill always matches the
+ *  arrows.  rgb565_to_hue(uint16_t) is the inverse (unpack 5/6/5 back to
+ *  8 bits per channel, then the standard max/min-channel HSV hue formula);
+ *  nothing needs it yet, so expect a harmless "defined but not used" -Wall
+ *  warning on it alone.  Both are integer-only, like the rest of this
+ *  file's math.
  *
  *  Built on the drivers from "picocalc-text-starter" by Blair Leduc
  *  (drivers/lcd.c, drivers/southbridge.c): lcd_init(), lcd_solid_rectangle(),
@@ -110,17 +119,27 @@
  *  a background poll draining the same FIFO.
  *
  *  Controls:
- *      UP     - grow the selected shape (2px per side, 4px per dimension)
- *      DOWN   - shrink the selected shape (stops at the 1x1 degenerate case)
- *      F1     - toggle shape-select mode <-> colour-select mode
- *      RIGHT  - shape-select mode: move the blue box to the next shape;
- *               colour-select mode: step the selected shape's colour
- *               forward around the rainbow (moves its arrow right)
- *      LEFT   - shape-select mode: move the blue box to the previous
- *               shape; colour-select mode: step the selected shape's
- *               colour back around the rainbow (moves its arrow left)
+ *      + / -  - grow / shrink the selected shape (2px per side, 4px per
+ *               dimension; stops at the 1x1 degenerate case)
+ *      DOWN   - one step down a vertical chain: top-row shape, the shape
+ *               below it, then the hue strips, saturation bar and value bar
+ *               (the same modes F1, F2 and F3 pick directly)
+ *      UP     - one step back up the same chain, ending on the selected
+ *               shape in the bottom row, then the shape above it
+ *      F1     - step shape-select -> hue (plain wheel) -> hue (improved
+ *               wheel) -> shape-select
+ *      F2     - toggle saturation mode (0 to 100 percent in steps of 2)
+ *      F3     - toggle value (brightness) mode (0 to 100 percent in steps
+ *               of 2)
+ *      RIGHT  - shape-select mode: move the white box to the next shape;
+ *               picker modes: step the selected setting up (a hue moves its
+ *               arrow right)
+ *      LEFT   - shape-select mode: move the white box to the previous
+ *               shape; picker modes: step the selected setting down
  *      F5     - rotate the selected shape 5 degrees clockwise
  *      F4     - rotate the selected shape 5 degrees counter-clockwise
+ *      ?      - show the help screen (also shown at the start); any key
+ *               continues
  *      ESC or Q - leave for the PicoCalc UF2 Loader menu
  *      ~ (SHIFT + backtick) - reboot into BOOTSEL (USB drive) mode
  */
@@ -138,93 +157,18 @@
                              * ROWS, MAX_ROW                            */
 #include "southbridge.h"    /* sb_init(), sb_read_keyboard()           */
 #include "keyboard.h"       /* KEY_UP, KEY_DOWN, KEY_LEFT, KEY_RIGHT,
-                             * KEY_F1, KEY_F4, KEY_F5, KEY_STATE_*     */
+                             * KEY_F1 to KEY_F5, KEY_STATE_*          */
 
-#define VERSION "V0.1"      /* matches CHANGELOG.md's heading for this round */
+#include "shapes_const.h"   /* every constant and data table            */
 
-#define COL_BG   RGB(  0,   0,   0)
-#define COL_TEXT RGB(235, 235, 235)
-#define COL_BLUE RGB( 60, 140, 255)    /* selection bounding-box colour    */
-#define COL_ARROW COL_TEXT              /* colour-picker arrow             */
 
-#define GROW_PER_SIDE (2)              /* pixels added to each of the four
-                                         * sides per UP press (and removed
-                                         * per DOWN press)                  */
 
-/* Sizes are odd-only: with h = size/2 (integer division), an odd size
- * spans exactly [cx-h, cx+h] - a whole pixel sits dead-centre at (cx,cy).
- * An even size spans [cx-h, cx+h-1], one pixel off-centre, so rotating it
- * about (cx,cy) visibly drifts.  GROW_PER_SIDE's per-press step (2 * that,
- * 4px) is even, so parity never changes once these three are all odd.    */
-#define MIN_SIZE      (1)              /* degenerate case: a single pixel  */
-
-/* All five shapes are maximised at boot: 59px (the largest odd size not
- * exceeding 60) is comfortably inside every spacing margin below (the top
- * row's WIDTH/3 columns are the tightest fit, and even that allows up to
- * 96), so it's a fixed cap rather than a layout-derived one.  DOWN can
- * still shrink from here; UP just has no further room to grow into.      */
-#define MAX_SIZE      (59)
-#define INIT_SIZE     (MAX_SIZE)
-
-_Static_assert(MIN_SIZE % 2 == 1 && MAX_SIZE % 2 == 1 && INIT_SIZE % 2 == 1,
-               "sizes must stay odd so a shape's centre pixel doesn't drift on rotation");
-
-#define ROTATE_STEP   (5)              /* degrees per F4/F5 press          */
-
-#define TCOLS         (40)             /* 320 / 8px-wide glyphs, built-in
-                                         * 8x10 font (see put_row)          */
-
-/* The physical PicoCalc's bezel/screen makes MAX_ROW (the very bottom
- * text row) hard to see, so it's off-limits for anything but a possible
- * future debug line - the status line lives one row above it instead.    */
-#define STATUS_ROW    (MAX_ROW - 1)
-
-/* the rainbow strip above the status line: RAINBOW_W x RAINBOW_H,
- * horizontally centred, its bottom edge RAINBOW_GAP pixels above the
- * status row's top (clear of it, rather than flush against it).  Its
- * column <-> hue mapping is proportional (col * 360 / RAINBOW_W, and the
- * inverse for the arrow - see draw_rainbow_strip() / draw_scene()), not
- * tied to any fixed degrees-per-column, so RAINBOW_W can be any width
- * and the strip still sweeps the full wheel exactly once across it.      */
-#define RAINBOW_W   (300)
-#define RAINBOW_H   (20)
-#define RAINBOW_GAP (20)
-#define RAINBOW_X   ((WIDTH - RAINBOW_W) / 2)
-#define RAINBOW_Y   (STATUS_ROW * GLYPH_HEIGHT - RAINBOW_H - RAINBOW_GAP)
-
-/* colour selection (F1 toggles it; see the header comment).  HUE_STEP is
- * purely how far LEFT/RIGHT move the selected shape's hue per press -
- * independent of RAINBOW_W, since the strip's column mapping is now
- * proportional rather than one-column-per-HUE_STEP.  DEFAULT_HUE (pure
- * green) is every shape's starting colour.                               */
-#define HUE_STEP     (2)
-#define DEFAULT_HUE  (120)
-
-/* the small downward-pointing arrow drawn above the rainbow strip in
- * colour-selection mode, ARROW_GAP pixels above it, ARROW_HALF_W*2+1
- * pixels wide and ARROW_H tall (apex at the bottom, touching the strip
- * would be ARROW_GAP 0 - kept a couple of pixels clear instead)          */
-#define ARROW_HALF_W (3)
-#define ARROW_H      (6)
-#define ARROW_GAP    (2)
-
-#define BOX_PAD       (4)              /* gap between a shape's own size x
-                                         * size box and the selection outline
-                                         * drawn around it                  */
-#define BOX_THICK     (2)              /* selection outline thickness      */
-
-/* How far each row sits from vertical centre.  ROW_HALF_EXTENT is the
- * farthest any shape ever reaches from its own centre - MAX_SIZE/2 for
- * the shape itself, plus BOX_PAD for its selection box outline (the
- * outline's own BOX_THICK is drawn inward from that edge, not beyond it).
- * Placing each row's centre ROW_HALF_EXTENT + ROW_GAP/2 pixels out from
- * HEIGHT/2 leaves exactly ROW_GAP of clear space between the two rows
- * even when every shape (and its selection box) is at MAX_SIZE at once -
- * they can never overlap - while keeping the rows as close to centre as
- * that allows, freeing the most room above and below for anything else.  */
-#define ROW_GAP          (10)
-#define ROW_HALF_EXTENT  (MAX_SIZE / 2 + BOX_PAD)
-#define ROW_OFFSET       (ROW_HALF_EXTENT + ROW_GAP / 2)
+/* the wheel (strip) a hue mode edits, or -1 when `mode` is not a hue mode */
+static int mode_wheel(int mode)
+{
+    return (mode >= MODE_COLOUR_0 && mode <= MODE_COLOUR_1)
+         ? mode - MODE_COLOUR_0 : -1;
+}
 
 static inline uint16_t key_event(void)      { return sb_read_keyboard(); }
 static inline uint8_t  ev_state(uint16_t e) { return (e >> 8) & 0xFF; }
@@ -271,13 +215,28 @@ static int isqrt(int n)
  *  255 while the other two hold at 0 and 255; that ramp is `rising` /
  *  `falling` below.  Integer-only, like the rest of this file's math.
  */
-static void hue_to_rgb888(int hue_deg, uint8_t *r, uint8_t *g, uint8_t *b)
+/* Improved wheel: a linear ramp v (0..255) is remapped to the quarter
+ * circle sqrt(v * (510 - v)).  0 stays 0 and 255 stays 255, but the values
+ * in between rise faster, so the colours between the primaries are not
+ * dimmer than the primaries themselves (integer square root, no libm).    */
+static int round_ramp(int v)
+{
+    return isqrt(v * (510 - v));
+}
+
+static void hue_to_rgb888(int hue_deg, int wheel, int sat, int val,
+                          uint8_t *r, uint8_t *g, uint8_t *b)
 {
     hue_deg = ((hue_deg % 360) + 360) % 360;   /* normalise to 0..359 */
     int region  = hue_deg / 60;                /* which 60-degree segment  */
     int rem     = hue_deg % 60;                /* position within it, 0..59*/
     int rising  = (rem * 255) / 59;
     int falling = 255 - rising;
+
+    if (wheel == WHEEL_ROUND) {
+        rising  = round_ramp(rising);
+        falling = round_ramp(falling);
+    }
 
     switch (region) {
     case 0: *r = 255;     *g = rising;  *b = 0;       break; /* red    -> yellow  */
@@ -287,15 +246,29 @@ static void hue_to_rgb888(int hue_deg, uint8_t *r, uint8_t *g, uint8_t *b)
     case 4: *r = rising;  *g = 0;       *b = 255;     break; /* blue   -> magenta */
     default:*r = 255;     *g = 0;       *b = falling; break; /* magenta-> red     */
     }
+
+    /* saturation: blend each channel toward white (100 = the pure colour) */
+    if (sat < SAT_MAX) {
+        *r = (uint8_t)(255 - (255 - *r) * sat / SAT_MAX);
+        *g = (uint8_t)(255 - (255 - *g) * sat / SAT_MAX);
+        *b = (uint8_t)(255 - (255 - *b) * sat / SAT_MAX);
+    }
+
+    /* value: scale each channel toward black (100 = full brightness)      */
+    if (val < VAL_MAX) {
+        *r = (uint8_t)(*r * val / VAL_MAX);
+        *g = (uint8_t)(*g * val / VAL_MAX);
+        *b = (uint8_t)(*b * val / VAL_MAX);
+    }
 }
 
 /* hue (0..359 degrees, wraps) -> packed RGB565, via the display driver's
  * own RGB() macro (lcd.h) so the 8-bit-per-channel -> 5/6/5 truncation is
  * exactly what lcd_solid_rectangle() etc. already expect.                */
-static uint16_t hue_to_rgb565(int hue_deg)
+static uint16_t hue_to_rgb565(int hue_deg, int wheel, int sat, int val)
 {
     uint8_t r, g, b;
-    hue_to_rgb888(hue_deg, &r, &g, &b);
+    hue_to_rgb888(hue_deg, wheel, sat, val, &r, &g, &b);
     return RGB(r, g, b);
 }
 
@@ -346,13 +319,13 @@ static int rgb565_to_hue(uint16_t colour)
     return rgb888_to_hue(r, g, b);
 }
 
-/* the RAINBOW_W x RAINBOW_H strip just above the status line, each
+/* one RAINBOW_W x RAINBOW_H hue strip (there are NUM_WHEELS of them), each
  * column's hue proportional to its position (col * 360 / RAINBOW_W) so
  * the RAINBOW_W columns together sweep the full 360-degree wheel exactly
- * once, at whatever width RAINBOW_W is.  Doubles as the colour picker in
- * colour-selection mode: draw_colour_arrow() points at whichever column
- * the selected shape's hue[] currently matches (the same formula,
- * inverted - see draw_scene()).
+ * once, at whatever width RAINBOW_W is.  Doubles as the hue picker:
+ * draw_colour_arrow() points at whichever column the selected shape's
+ * hue[] currently matches (the same formula, inverted - see
+ * draw_scene()).
  *
  * Built and sent as ONE lcd_blit() of the whole RAINBOW_W x RAINBOW_H
  * buffer, not RAINBOW_W separate fill() calls: lcd_solid_rectangle() (and
@@ -364,21 +337,57 @@ static int rgb565_to_hue(uint16_t colour)
  * built only once, the first call (`built` latches that): the strip's
  * pixels never change at runtime, only the arrow drawn above it does, so
  * every call after the first is just the one blit.                       */
-static void draw_rainbow_strip(int x0, int y0)
+static void draw_rainbow_strip(int x0, int y0, int wheel)
 {
-    static uint16_t buf[RAINBOW_W * RAINBOW_H];
-    static bool built = false;
+    static uint16_t buf[NUM_WHEELS][RAINBOW_W * RAINBOW_H];
+    static bool built[NUM_WHEELS];
 
-    if (!built) {
+    if (!built[wheel]) {
         for (int col = 0; col < RAINBOW_W; col++) {
-            uint16_t colour = hue_to_rgb565(col * 360 / RAINBOW_W);
+            uint16_t colour = hue_to_rgb565(col * 360 / RAINBOW_W, wheel, SAT_MAX, VAL_MAX);
             for (int row = 0; row < RAINBOW_H; row++)
-                buf[row * RAINBOW_W + col] = colour;
+                buf[wheel][row * RAINBOW_W + col] = colour;
         }
-        built = true;
+        built[wheel] = true;
     }
 
-    lcd_blit(buf, x0, y0, RAINBOW_W, RAINBOW_H);
+    lcd_blit(buf[wheel], x0, y0, RAINBOW_W, RAINBOW_H);
+}
+
+/* The saturation bar (vary_sat true: white at the left to the colour at
+ * the right) and the value bar (vary_sat false: black at the left to the
+ * colour at the right): RAINBOW_W columns each, at `hue` on `wheel`.  The
+ * other setting (value for the saturation bar, saturation for the value
+ * bar) is the selected shape's own, so each bar shows the colours the
+ * shape can have.  A bar is rebuilt (one row of colours, copied down the
+ * bar) only when the hue, the wheel or that other setting differs from the
+ * last build; otherwise the saved pixels are just sent again.              */
+static void draw_bar(int y0, int hue, int wheel, int sat, int val,
+                     bool vary_sat)
+{
+    static uint16_t buf[2][RAINBOW_W * SAT_H];
+    static int built_for[2][3];            /* hue, wheel, other setting   */
+    static bool built[2];
+
+    int i = vary_sat ? 0 : 1;
+    int other = vary_sat ? val : sat;
+
+    if (!built[i] || built_for[i][0] != hue || built_for[i][1] != wheel
+        || built_for[i][2] != other) {
+        for (int col = 0; col < RAINBOW_W; col++) {
+            int pct = col * SAT_MAX / (RAINBOW_W - 1);
+            buf[i][col] = vary_sat ? hue_to_rgb565(hue, wheel, pct, val)
+                                   : hue_to_rgb565(hue, wheel, sat, pct);
+        }
+        for (int row = 1; row < SAT_H; row++)
+            memcpy(&buf[i][row * RAINBOW_W], buf[i], RAINBOW_W * sizeof buf[i][0]);
+        built_for[i][0] = hue;
+        built_for[i][1] = wheel;
+        built_for[i][2] = other;
+        built[i] = true;
+    }
+
+    lcd_blit(buf[i], RAINBOW_X, y0, RAINBOW_W, SAT_H);
 }
 
 /* ===================================================================== */
@@ -386,22 +395,6 @@ static void draw_rainbow_strip(int x0, int y0)
 /* ===================================================================== */
 
 typedef struct { int x, y; } point_t;
-
-/* sin(0..90 degrees) x1000, one entry per integer degree; sin1000() /
- * cos1000() below derive every other degree from this by symmetry, so
- * there's no <math.h> dependency for the rotation math.                  */
-static const int16_t SIN_TABLE_Q1000[91] = {
-      0,  17,  35,  52,  70,  87, 105, 122, 139, 156,
-    174, 191, 208, 225, 242, 259, 276, 292, 309, 326,
-    342, 358, 375, 391, 407, 423, 438, 454, 469, 485,
-    500, 515, 530, 545, 559, 574, 588, 602, 616, 629,
-    643, 656, 669, 682, 695, 707, 719, 731, 743, 755,
-    766, 777, 788, 799, 809, 819, 829, 839, 848, 857,
-    866, 875, 883, 891, 899, 906, 914, 921, 927, 934,
-    940, 946, 951, 956, 961, 966, 970, 974, 978, 981,
-    985, 987, 990, 992, 994, 996, 997, 998, 999, 999,
-   1000,
-};
 
 static int sin1000(int deg)
 {
@@ -484,12 +477,6 @@ static void draw_square(int cx, int cy, int size, int angle_deg, uint16_t colour
     };
     fill_polygon(corners, 4, colour);
 }
-
-#define THIN_WIDTH (5)  /* the thin rectangle's fixed short side - odd, for
-                         * the same centre-pixel-on-rotation reason as the
-                         * size[] values (see the MIN_SIZE comment)        */
-_Static_assert(THIN_WIDTH % 2 == 1,
-               "THIN_WIDTH must be odd so its centre pixel doesn't drift on rotation");
 
 /* size x THIN_WIDTH rectangle, centred at (cx, cy), rotated angle_deg
  * degrees - `size` is the long side, same as every other shape's shared
@@ -583,10 +570,6 @@ static void draw_pentagon(int cx, int cy, int size, int angle_deg, uint16_t colo
     fill_polygon(corners, 5, colour);
 }
 
-/* the {5/2} star's inner-point radius as a fraction (x1000) of its outer
- * (point) radius - the ratio that makes a regular five-pointed star       */
-#define STAR_INNER_RATIO_Q1000 (382)
-
 /* `size`-diameter (outer points) filled five-pointed star, point up,
  * centred at (cx, cy), rotated angle_deg degrees.  10 vertices alternating
  * an outer (point) and inner radius every 36 degrees; concave, but
@@ -615,27 +598,14 @@ static void draw_star(int cx, int cy, int size, int angle_deg, uint16_t colour)
 /*  Shape selection (the LEFT/RIGHT keys step through these)              */
 /* ===================================================================== */
 
-/* left-to-right, top row then bottom row */
-enum { SHAPE_THIN_RECT, SHAPE_TRIANGLE, SHAPE_SQUARE,
-       SHAPE_PENTAGON, SHAPE_STAR, SHAPE_CIRCLE,
-       NUM_SHAPES };
-
-/* SHAPE_THIN_RECT displays as "LINE" - not technically accurate (it's
- * still a thin filled rectangle, draw_thin_rect() and THIN_WIDTH are
- * unchanged), but that's the name it goes by on screen and in
- * conversation from here on.                                             */
-static const char *const SHAPE_NAME[NUM_SHAPES] = {
-    "LINE", "TRIANGLE", "SQUARE", "PENTAGON", "STAR", "CIRCLE",
-};
-
 /* every shape's centre - the one place the row/column layout lives, so
  * draw_scene() and the selection box below always agree on where a shape
  * is.  Three shapes per row, sharing the same WIDTH/6-based columns as
  * the top row always has, so top and bottom line up.                     */
 static void shape_center(int shape, int *cx, int *cy)
 {
-    int top_cy = HEIGHT / 2 - ROW_OFFSET;
-    int bot_cy = HEIGHT / 2 + ROW_OFFSET;
+    int top_cy = TOP_ROW_CY;
+    int bot_cy = BOT_ROW_CY;
 
     switch (shape) {
     case SHAPE_THIN_RECT: *cx = WIDTH / 6;         *cy = top_cy; break;
@@ -678,21 +648,57 @@ static void draw_box_outline(int cx, int cy, int size, uint16_t colour)
     fill(colour, x0 + side - BOX_THICK, y0, BOX_THICK, side);  /* right  */
 }
 
-/* small downward-pointing arrow (apex at the bottom) shown above the
- * rainbow strip in colour-selection mode, marking the selected shape's
- * current hue - hue_x is the screen x of that hue's rainbow-strip column
- * (caller computes it: RAINBOW_X + the hue's column, the inverse of
- * draw_rainbow_strip()'s col -> hue mapping), so the arrow always points
- * straight down at the exact column the shape's colour comes from.       */
-static void draw_colour_arrow(int hue_x)
+/* filled triangle with its apex at (x, apex_y): pointing down (apex at the
+ * bottom, base above it) when `down`, otherwise pointing up                */
+static void draw_arrow(int x, int apex_y, bool down)
 {
-    int apex_y = RAINBOW_Y - ARROW_GAP;
+    int base_y = down ? apex_y - ARROW_H : apex_y + ARROW_H;
     point_t tri[3] = {
-        { hue_x,               apex_y },
-        { hue_x + ARROW_HALF_W, apex_y - ARROW_H },
-        { hue_x - ARROW_HALF_W, apex_y - ARROW_H },
+        { x,                apex_y },
+        { x + ARROW_HALF_W, base_y },
+        { x - ARROW_HALF_W, base_y },
     };
     fill_polygon(tri, 3, COL_ARROW);
+}
+
+/* arrow marking the selected shape's current hue - hue_x is the screen x
+ * of that hue's strip column (caller computes it: RAINBOW_X + the hue's
+ * column, the inverse of draw_rainbow_strip()'s col -> hue mapping), so
+ * the arrow always points straight at the exact column the shape's colour
+ * comes from.  The plain wheel's arrow sits above its strip and points
+ * down; the improved wheel's sits below its strip and points up, because
+ * the strips touch and there is no room between them.                    */
+static void draw_colour_arrow(int hue_x, int wheel)
+{
+    if (wheel == WHEEL_PLAIN)
+        draw_arrow(hue_x, WHEEL_Y(wheel) - ARROW_GAP, true);
+    else
+        draw_arrow(hue_x, WHEEL_Y(wheel) + RAINBOW_H + ARROW_GAP, false);
+}
+
+/* white outline just outside a bar, BOX_THICK wide, marking the bar the
+ * current mode edits.  The two rainbow strips touch, so the edge they
+ * share is left out (skip_top for the lower strip, skip_bottom for the
+ * upper one) instead of being drawn over the neighbouring strip.         */
+static void draw_bar_outline(int y0, int h, bool skip_top, bool skip_bottom)
+{
+    int x0 = RAINBOW_X - BOX_THICK;
+    int w  = RAINBOW_W + 2 * BOX_THICK;
+
+    if (!skip_top)
+        fill(COL_BAR_BOX, x0, y0 - BOX_THICK, w, BOX_THICK);
+    if (!skip_bottom)
+        fill(COL_BAR_BOX, x0, y0 + h, w, BOX_THICK);
+    fill(COL_BAR_BOX, x0, y0, BOX_THICK, h);
+    fill(COL_BAR_BOX, RAINBOW_X + RAINBOW_W, y0, BOX_THICK, h);
+}
+
+/* downward arrow above a bar whose top edge is bar_y, at the column for
+ * `pct` (0..100)                                                          */
+static void draw_bar_arrow(int bar_y, int pct)
+{
+    draw_arrow(RAINBOW_X + pct * (RAINBOW_W - 1) / SAT_MAX,
+               bar_y - ARROW_GAP, true);
 }
 
 /* ===================================================================== */
@@ -716,7 +722,7 @@ static void put_row(int row, const char *str, uint16_t fg)
 }
 
 /* shows the selected shape's name, size and rotation, e.g.
- * "SQUARE  SIZE: 59px  ROTATION: 35 DEG"                                  */
+ * "SQUARE  SIZE: 49px  ROTATION: 35 DEG"                                  */
 static void show_status(int selected, int size, int angle_deg)
 {
     char buf[40];
@@ -725,33 +731,103 @@ static void show_status(int selected, int size, int angle_deg)
     put_row(STATUS_ROW, buf, COL_TEXT);
 }
 
+/* shows the selected shape's colour as the three RGB565 fields in hex:
+ * R and B are 5 bits (00..1F), G is 6 bits (00..3F), e.g. "R:00 G:3F B:00" */
+static void show_colour(uint16_t colour)
+{
+    char buf[24];
+    snprintf(buf, sizeof buf, "R:%02X G:%02X B:%02X",
+             (colour >> 11) & 0x1F, (colour >> 5) & 0x3F, colour & 0x1F);
+    put_row(COLOUR_ROW, buf, COL_TEXT);
+}
+
 /* clear the screen, draw all six shapes at their own size, rotation and
- * colour (size[] / angle[] / hue[] each have one entry per SHAPE_*
- * index), the selection box around `selected`, the rainbow strip, the
- * colour-selection arrow (only in colour_mode) and the status line       */
+ * colour (size[] / angle[] / hue[] / wheel[] each have one entry per SHAPE_*
+ * index), the selection box around `selected`, the two rainbow strips, the
+ * colour-selection arrow (only in a colour mode), the saturation bar and
+ * its arrow (only in saturation mode) and the status line                */
 static void draw_scene(const int *size, int selected, const int *angle,
-                        const int *hue, bool colour_mode)
+                        const int *hue, const int *wheel, const int *sat,
+                        const int *val, int mode)
 {
     fill(COL_BG, 0, 0, WIDTH, HEIGHT);
 
     for (int s = 0; s < NUM_SHAPES; s++) {
         int cx = 0, cy = 0;
         shape_center(s, &cx, &cy);
-        draw_shape(s, cx, cy, size[s], angle[s], hue_to_rgb565(hue[s]));
+        draw_shape(s, cx, cy, size[s], angle[s], hue_to_rgb565(hue[s], wheel[s], sat[s], val[s]));
     }
 
     int scx = 0, scy = 0;
     shape_center(selected, &scx, &scy);
-    draw_box_outline(scx, scy, size[selected], COL_BLUE);
+    draw_box_outline(scx, scy, size[selected], COL_SHAPE_BOX);
 
-    draw_rainbow_strip(RAINBOW_X, RAINBOW_Y);
-    if (colour_mode) {
-        /* inverse of draw_rainbow_strip()'s col * 360 / RAINBOW_W, rounded
-         * to the nearest column instead of truncated                      */
-        int col = (hue[selected] * RAINBOW_W + 180) / 360;
-        draw_colour_arrow(RAINBOW_X + col);
-    }
+    for (int w = 0; w < NUM_WHEELS; w++)
+        draw_rainbow_strip(RAINBOW_X, WHEEL_Y(w), w);
+    draw_bar(SAT_Y, hue[selected], wheel[selected], sat[selected],
+             val[selected], true);
+    draw_bar(VAL_Y, hue[selected], wheel[selected], sat[selected],
+             val[selected], false);
+    /* the arrows are always shown for the selected shape's own hue,
+     * saturation and value; the white outline marks the picker the current
+     * mode edits.  In a hue mode the hue arrow and the outline are on the
+     * same strip (the one being edited); otherwise the arrow is on the
+     * strip of the wheel the shape is coloured from.                      */
+    int edit_wheel = mode_wheel(mode);
+    int arrow_wheel = (edit_wheel >= 0) ? edit_wheel : wheel[selected];
+
+    /* inverse of draw_rainbow_strip()'s col * 360 / RAINBOW_W, rounded to
+     * the nearest column instead of truncated                             */
+    int col = (hue[selected] * RAINBOW_W + 180) / 360;
+    draw_colour_arrow(RAINBOW_X + col, arrow_wheel);
+    draw_bar_arrow(SAT_Y, sat[selected]);
+    draw_bar_arrow(VAL_Y, val[selected]);
+
+    if (mode == MODE_SATURATION)
+        draw_bar_outline(SAT_Y, SAT_H, false, false);
+    else if (mode == MODE_VALUE)
+        draw_bar_outline(VAL_Y, VAL_H, false, false);
+    else if (edit_wheel >= 0)
+        draw_bar_outline(WHEEL_Y(edit_wheel), RAINBOW_H,
+                         edit_wheel == WHEEL_ROUND, edit_wheel == WHEEL_PLAIN);
+    show_colour(hue_to_rgb565(hue[selected], wheel[selected], sat[selected],
+                              val[selected]));
     show_status(selected, size[selected], angle[selected]);
+}
+
+/* print a string starting at text column `col` of `row` */
+static void put_text(int col, int row, const char *str, uint16_t fg)
+{
+    lcd_set_foreground(fg);
+    lcd_putstr((uint8_t)col, (uint8_t)row, str);
+}
+
+/* The help screen: the title, author and version, the key list and a line
+ * saying any key continues.  It waits for a key press (releases are
+ * ignored) and the caller redraws the scene afterwards.                   */
+static void show_help(void)
+{
+    char buf[TCOLS + 1];
+
+    lcd_set_bold(true);
+    fill(COL_BG, 0, 0, WIDTH, HEIGHT);
+    put_row(HELP_TITLE_ROW, HELP_TITLE, COL_HELP_TITLE);
+    put_row(HELP_AUTHOR_ROW, HELP_AUTHOR, COL_HELP_TEXT);
+    snprintf(buf, sizeof buf, "Version: %s", VERSION);
+    put_row(HELP_VERSION_ROW, buf, COL_HELP_TEXT);
+
+    for (int i = 0; i < HELP_LINE_COUNT; i++)
+        put_text(HELP_LEFT_COL, HELP_FIRST_ROW + i, HELP_LINES[i], COL_HELP_TEXT);
+
+    put_row(HELP_FOOTER_ROW, HELP_FOOTER, COL_HELP_FOOTER);
+
+    for (;;) {
+        uint16_t e = key_event();
+        if (e && ev_state(e) == KEY_STATE_PRESSED)
+            break;
+        sleep_ms(2);
+    }
+    lcd_set_bold(false);
 }
 
 /* Leaves the program for the PicoCalc UF2 Loader's menu: shows a short
@@ -784,15 +860,22 @@ int main(void)
 
     int size[NUM_SHAPES];
     int hue[NUM_SHAPES];
+    int wheel[NUM_SHAPES];            /* which strip each hue is read from */
+    int sat[NUM_SHAPES];              /* each shape's saturation, 0..SAT_MAX */
+    int val[NUM_SHAPES];              /* each shape's value, 0..VAL_MAX      */
     for (int s = 0; s < NUM_SHAPES; s++) {
         size[s] = INIT_SIZE;
         hue[s]  = DEFAULT_HUE;
+        wheel[s] = WHEEL_PLAIN;
+        sat[s]   = DEFAULT_SAT;
+        val[s]   = DEFAULT_VAL;
     }
-    int selected  = SHAPE_THIN_RECT;  /* the first shape, per the blue box */
+    int selected  = SHAPE_THIN_RECT;  /* the first shape, per the white box */
     int angle[NUM_SHAPES] = { 0 };    /* each shape keeps its own rotation,
                                        * remembered across selection changes */
-    bool colour_mode = false;         /* F1 toggles shape- vs colour-select */
-    draw_scene(size, selected, angle, hue, colour_mode);
+    int mode = MODE_SHAPE;            /* F1 steps shape / colour 0 / colour 1 */
+    show_help();                      /* any key continues */
+    draw_scene(size, selected, angle, hue, wheel, sat, val, mode);
 
     for (;;) {
         uint16_t e = key_event();
@@ -816,41 +899,80 @@ int main(void)
         if (code == KEY_ESC || code == 'q' || code == 'Q')
             exit_to_loader();                   /* back to the UF2 Loader */
 
-        if (code == KEY_F1) {                     /* toggle shape / colour mode */
-            colour_mode = !colour_mode;
-            draw_scene(size, selected, angle, hue, colour_mode);
+        if (code == KEY_HELP) {
+            show_help();
+            draw_scene(size, selected, angle, hue, wheel, sat, val, mode);
+        } else if (code == KEY_F1) {                     /* toggle shape / colour mode */
+            mode = (mode >= NUM_MODES) ? MODE_SHAPE : (mode + 1) % NUM_MODES;
+            draw_scene(size, selected, angle, hue, wheel, sat, val, mode);
+        } else if (code == SAT_KEY) {               /* toggle saturation mode */
+            mode = (mode == MODE_SATURATION) ? MODE_SHAPE : MODE_SATURATION;
+            draw_scene(size, selected, angle, hue, wheel, sat, val, mode);
+        } else if (code == VAL_KEY) {               /* toggle value mode */
+            mode = (mode == MODE_VALUE) ? MODE_SHAPE : MODE_VALUE;
+            draw_scene(size, selected, angle, hue, wheel, sat, val, mode);
         } else if (code == KEY_RIGHT) {
-            if (colour_mode) {                     /* step the arrow / hue forward */
+            if (mode == MODE_VALUE) {
+                if (val[selected] < VAL_MAX) val[selected] += VAL_STEP;
+                if (val[selected] > VAL_MAX) val[selected] = VAL_MAX;
+            } else if (mode == MODE_SATURATION) {
+                if (sat[selected] < SAT_MAX) sat[selected] += SAT_STEP;
+                if (sat[selected] > SAT_MAX) sat[selected] = SAT_MAX;
+            } else if (mode != MODE_SHAPE) {       /* step the arrow / hue forward */
+                wheel[selected] = mode_wheel(mode);
                 hue[selected] = (hue[selected] + HUE_STEP) % 360;
             } else {                               /* move the selection box forward */
                 selected = (selected + 1) % NUM_SHAPES;
             }
-            draw_scene(size, selected, angle, hue, colour_mode);
+            draw_scene(size, selected, angle, hue, wheel, sat, val, mode);
         } else if (code == KEY_LEFT) {
-            if (colour_mode) {                     /* step the arrow / hue back */
+            if (mode == MODE_VALUE) {
+                val[selected] -= VAL_STEP;
+                if (val[selected] < 0) val[selected] = 0;
+            } else if (mode == MODE_SATURATION) {
+                sat[selected] -= SAT_STEP;
+                if (sat[selected] < 0) sat[selected] = 0;
+            } else if (mode != MODE_SHAPE) {       /* step the arrow / hue back */
+                wheel[selected] = mode_wheel(mode);
                 hue[selected] = (hue[selected] - HUE_STEP + 360) % 360;
             } else {                               /* move the selection box back */
                 selected = (selected - 1 + NUM_SHAPES) % NUM_SHAPES;
             }
-            draw_scene(size, selected, angle, hue, colour_mode);
-        } else if (code == KEY_UP) {              /* grow only the selected shape */
+            draw_scene(size, selected, angle, hue, wheel, sat, val, mode);
+        } else if (code == KEY_DOWN) {            /* next row / picker down */
+            if (mode != MODE_SHAPE) {
+                if (mode < MODE_VALUE)
+                    mode++;
+            } else if (selected < SHAPES_PER_ROW) {
+                selected += SHAPES_PER_ROW;
+            } else {
+                mode = MODE_COLOUR_0;
+            }
+            draw_scene(size, selected, angle, hue, wheel, sat, val, mode);
+        } else if (code == KEY_UP) {              /* previous row / picker up */
+            if (mode != MODE_SHAPE)
+                mode--;
+            else if (selected >= SHAPES_PER_ROW)
+                selected -= SHAPES_PER_ROW;
+            draw_scene(size, selected, angle, hue, wheel, sat, val, mode);
+        } else if (code == KEY_GROW) {            /* grow only the selected shape */
             if (size[selected] < MAX_SIZE) {
                 size[selected] += 2 * GROW_PER_SIDE;
                 if (size[selected] > MAX_SIZE) size[selected] = MAX_SIZE;
-                draw_scene(size, selected, angle, hue, colour_mode);
+                draw_scene(size, selected, angle, hue, wheel, sat, val, mode);
             }
-        } else if (code == KEY_DOWN) {            /* shrink only the selected shape */
+        } else if (code == KEY_SHRINK) {          /* shrink only the selected shape */
             if (size[selected] > MIN_SIZE) {
                 size[selected] -= 2 * GROW_PER_SIDE;
                 if (size[selected] < MIN_SIZE) size[selected] = MIN_SIZE;
-                draw_scene(size, selected, angle, hue, colour_mode);
+                draw_scene(size, selected, angle, hue, wheel, sat, val, mode);
             }
         } else if (code == KEY_F5) {              /* rotate selected CW    */
             angle[selected] = (angle[selected] + ROTATE_STEP) % 360;
-            draw_scene(size, selected, angle, hue, colour_mode);
+            draw_scene(size, selected, angle, hue, wheel, sat, val, mode);
         } else if (code == KEY_F4) {              /* rotate selected CCW   */
             angle[selected] = (angle[selected] - ROTATE_STEP + 360) % 360;
-            draw_scene(size, selected, angle, hue, colour_mode);
+            draw_scene(size, selected, angle, hue, wheel, sat, val, mode);
         }
     }
 }
