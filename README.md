@@ -117,24 +117,35 @@ Output: `shapes-Linux` and `libSDL2-2.0.so.0` in the top-level folder.
 [`picocalc-text-starter`](https://github.com/BlairLeduc/picocalc-text-starter)
 by **Blair Leduc** (LCD, audio and south-bridge keyboard drivers) is vendored
 in `picocalc-text-starter-main/` and used under its own license (see the
-`LICENSE` file in that folder). Two local changes are made there, not in
-upstream: in `drivers/lcd.c`, `lcd_putstr()` now cuts a string off at the right edge
-of the display instead of overrunning its one-row line buffer; and in `drivers/fat32.c`, `get_next_free_cluster()` now advances its
-search hint past the cluster it hands out, so a long sequential write to the
-SD card no longer re-scans every cluster already given out and looks hung.
+`LICENSE` file in that folder).
 
-Two more small fixes were made in `picocalc-text-starter-main/drivers/` after that one.
-In `fat32.c`, `fat32_dir_read()` skips deleted entries before it looks at long-name
-parts and bounds-checks the long-name offset (a deleted long-name part used to be read
-as a live one and wrote 13 bytes at `filename + 468` of a 256-byte stack buffer), and
-`link_entry()` compares the 0xE5 deleted marker as an unsigned byte. In `sdcard.c`, the
-wait for a busy card is timed by the clock (0.5 s) and not by counting 10000 bytes,
-every command except CMD0 waits for the card first, and a write returns an error if the
-card is still busy after it (without that, a card that was still programming a block
-ignored the next command, and reads and writes failed on good sectors). Both were sent
-to the author as pull requests
-([#32](https://github.com/BlairLeduc/picocalc-text-starter/pull/32) and
-[#33](https://github.com/BlairLeduc/picocalc-text-starter/pull/33)).
+The vendored copy is Blair Leduc's `picocalc-text-starter` as it was on 2026-10-18
+(commit `85a002e`, "Upgrade to SDK 2.3.1"), with **four small local fixes** that
+are not in his repository yet:
+
+1. In `picocalc-text-starter-main/drivers/fat32.c`, `fat32_write()` no longer walks
+   the cluster chain, allocating a cluster at a cluster-aligned end of file, before
+   it allocates the clusters the write needs. That walk could leave a cluster
+   unreachable (a leak). A write of zero bytes returns at once.
+2. In the same file, `fat32_dir_read()` copies the last part of a long file name of
+   248 to 255 characters as far as it fits; upstream drops that part.
+3. In `picocalc-text-starter-main/drivers/sdcard.c`, a command is not sent to a card
+   that is still busy after the 0.5 s wait.
+4. In `picocalc-text-starter-main/drivers/lcd.c`, `lcd_putstr()` cuts a string off at
+   the right edge of the display, because the line buffer holds exactly one row of
+   text.
+
+Earlier versions of this copy carried other local changes, and those are now in
+the upstream code: the search-hint fix in `get_next_free_cluster()`
+([#30](https://github.com/BlairLeduc/picocalc-text-starter/pull/30)), the
+deleted-entry fixes in `fat32_dir_read()` and `link_entry()`
+([#32](https://github.com/BlairLeduc/picocalc-text-starter/pull/32)), the timed
+busy-card wait in `sdcard.c`
+([#33](https://github.com/BlairLeduc/picocalc-text-starter/pull/33)) and
+`lcd_unblit()` ([#31](https://github.com/BlairLeduc/picocalc-text-starter/pull/31)).
+`audio.pio` is exactly as downloaded: it now accepts 20 to 20000 Hz
+([#29](https://github.com/BlairLeduc/picocalc-text-starter/pull/29)), where it used
+to accept only 100 to 2000 Hz. Everything else is exactly as downloaded.
 
 ## License
 

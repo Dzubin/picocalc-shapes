@@ -6,6 +6,10 @@ the version here matches the `VERSION` define in `shapes_const.h`.
 
 ## [Unreleased]
 
+- Updated the vendored `picocalc-text-starter` to Blair Leduc's code of 2026-10-18 (commit
+  `85a002e`) and moved to Pico SDK 2.3.1. The search-hint, deleted-entry and busy-card fixes this
+  copy carried are in his code now; four small local fixes remain (README, Third-party). The audio
+  driver in it now sounds 20 to 20000 Hz, where it used to be silent outside 100 to 2000 Hz.
 ## [V0.2] - 2026-10-15
 
 - Vendored starter: `fat32.c` `fat32_write()` no longer leaks a cluster each time a write starts on a
